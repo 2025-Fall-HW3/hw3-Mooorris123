@@ -44,7 +44,7 @@ df_returns = df.pct_change().fillna(0)
 
 
 """
-Problem 1: 
+Problem 1:
 
 Implement an equal weighting strategy as dataframe "eqw". Please do "not" include SPY.
 """
@@ -62,6 +62,13 @@ class EqualWeightPortfolio:
         """
         TODO: Complete Task 1 Below
         """
+        assets_to_include = [col for col in df.columns if col != self.exclude]
+        num_assets = len(assets_to_include)
+
+        equal_weight = 1.0 / num_assets
+
+        for asset in assets_to_include:
+            self.portfolio_weights[asset] = equal_weight
 
         """
         TODO: Complete Task 1 Above
@@ -113,7 +120,20 @@ class RiskParityPortfolio:
         """
         TODO: Complete Task 2 Below
         """
+        for i in range(self.lookback + 1, len(df)):
+            window = df_returns[assets].iloc[i - self.lookback : i]
 
+            volatility = window.std()
+
+            volatility.replace(0, 1e-10, inplace=True)
+
+            inverse_volatility = 1 / volatility
+
+            sum_inverse_volatility = inverse_volatility.sum()
+
+            weights = inverse_volatility / sum_inverse_volatility
+
+            self.portfolio_weights.loc[df.index[i], assets] = weights.values
 
 
         """
@@ -187,11 +207,14 @@ class MeanVariancePortfolio:
                 """
                 TODO: Complete Task 3 Below
                 """
+                w = model.addMVar(n, lb=0, ub=1, name="w")
 
-                # Sample Code: Initialize Decision w and the Objective
-                # NOTE: You can modify the following code
-                w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+                objective = mu @ w - (self.gamma / 2) * (w @ Sigma @ w)
+                model.setObjective(objective, gp.GRB.MAXIMIZE)
+
+                model.addConstr(w.sum() == 1, name="budget")
+
+                model.setParam("NonConvex", 2)
 
                 """
                 TODO: Complete Task 3 Above
@@ -277,6 +300,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     judge = AssignmentJudge()
-    
+
     # All grading logic is protected in grader.py
     judge.run_grading(args)

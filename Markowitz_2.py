@@ -51,12 +51,19 @@ class MyPortfolio:
     NOTE: You can modify the initialization function
     """
 
-    def __init__(self, price, exclude, lookback=50, gamma=0):
+    def __init__(self, price, exclude, lookback=50, gamma=0, momentum_lookback=126, volatility_lookback=50, num_top_assets=5, market_trend_lookback=200):
         self.price = price
         self.returns = price.pct_change().fillna(0)
         self.exclude = exclude
         self.lookback = lookback
         self.gamma = gamma
+
+        self.momentum_lookback = momentum_lookback
+        self.volatility_lookback = volatility_lookback
+        self.num_top_assets = num_top_assets
+        self.market_trend_lookback = market_trend_lookback
+
+        self.max_lookback = max(self.momentum_lookback, self.volatility_lookback, self.market_trend_lookback)
 
     def calculate_weights(self):
         # Get the assets by excluding the specified column
@@ -70,8 +77,33 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
-        
-        
+
+        spy_sma = self.price['SPY'].rolling(window=self.market_trend_lookback).mean()
+
+        for i in range(self.max_lookback + 1, len(self.price)):
+            current_date = self.price.index[i]
+
+            is_bull_market = self.price['SPY'].iloc[i] > spy_sma.iloc[i]
+
+            if is_bull_market:
+                momentum_window = self.returns[assets].iloc[i - self.momentum_lookback : i]
+                momentum_scores = (1 + momentum_window).prod() - 1
+
+                top_assets = momentum_scores.nlargest(self.num_top_assets).index.tolist()
+
+                volatility_window = self.returns[top_assets].iloc[i - self.volatility_lookback : i]
+                volatility = volatility_window.std()
+                volatility.replace(0, 1e-10, inplace=True)
+
+                inverse_volatility = 1 / volatility
+                final_weights = inverse_volatility / inverse_volatility.sum()
+
+                self.portfolio_weights.loc[current_date, assets] = 0
+                self.portfolio_weights.loc[current_date, top_assets] = final_weights.values
+
+            else:
+                self.portfolio_weights.loc[current_date, assets] = 0
+
         """
         TODO: Complete Task 4 Above
         """
@@ -104,7 +136,7 @@ class MyPortfolio:
 if __name__ == "__main__":
     # Import grading system (protected file in GitHub Classroom)
     from grader_2 import AssignmentJudge
-    
+
     parser = argparse.ArgumentParser(
         description="Introduction to Fintech Assignment 3 Part 12"
     )
@@ -138,6 +170,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     judge = AssignmentJudge()
-    
+
     # All grading logic is protected in grader_2.py
     judge.run_grading(args)
